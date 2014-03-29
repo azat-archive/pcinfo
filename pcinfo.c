@@ -14,6 +14,8 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/mmzone.h>
+#include <linux/rbtree.h>
+#include <linux/slab.h>
 #include <asm/pgtable.h>
 #include "compat.h"
 
@@ -44,10 +46,39 @@ module_exit(pcInfoExit);
 #define DEVICE_NAME "pcinfo"
 
 static int majorNumber;
+struct FileInfo
+{
+    struct rb_node node;
+
+    struct inode *host;
+    size_t size;
+};
 struct Base
 {
     int deviceOpened; /* prevent multiple access to device */
+
+    struct rb_root rbRoot;
 };
+
+/** RB operations */
+static void rbInsert(struct FileInfo *node, struct rb_root *root)
+{
+    struct rb_node **new = &root->rb_node, *parent = NULL;
+
+    while (*new) {
+        parent = *new;
+        if (node->host < rb_entry(parent, struct FileInfo, node)->host) {
+            new = &parent->rb_left;
+        } else {
+            new = &parent->rb_right;
+        }
+    }
+
+    rb_link_node(&node->node, parent, new);
+    rb_insert_color(&node->node, root);
+}
+/** \ RB operations */
+
 /** XXX: attach it to inode */
 static struct Base base;
 
@@ -100,27 +131,25 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
 {
     pg_data_t *pgd;
 
-    unsigned long mappings = 0;
-    unsigned long pagesCached = 0;
-
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
         struct page *end = pgdat_page_nr(pgd, node_spanned_pages(pgd->node_id));
 
         for (; page != end; ++page) {
             struct address_space *mapping = page->mapping;
-            if (!mapping) {
-                continue;
-            }
-            if (!mapping->host) {
+            /** XXX: slab */
+            struct FileInfo *info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
+            BUG_ON(!info);
+
+            if (!mapping || !mapping->host) {
                 continue;
             }
 
-            ++mappings;
+            info->host = mapping->host;
+            info->size += mapping->nrpages * PAGE_SIZE;
+            rbInsert(info, &base.rbRoot);
         }
     }
-
-    printk(KERN_INFO "pcInfo: Mappings: %lu\n", mappings);
 
     return -EINVAL;
 }
