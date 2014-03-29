@@ -112,7 +112,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
             BUG_ON(!info);
 
             info->host = mapping->host;
-            info->size += mapping->nrpages * PAGE_SIZE;
+            info->size = mapping->nrpages * PAGE_SIZE;
 
             existed = rbFind(info, &base.rbRoot);
             /** XXX: augment */
