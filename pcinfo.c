@@ -45,7 +45,7 @@ static struct Base base;
 
 
 /** RB operations */
-static struct rb_node** rbFind(const struct FileInfo *node,
+struct rb_node** rbFind(const struct FileInfo *node,
                                struct rb_node *parent,
                                struct rb_root *root)
 {
@@ -62,7 +62,7 @@ static struct rb_node** rbFind(const struct FileInfo *node,
 
     return new;
 }
-static void rbInsert(struct FileInfo *node, struct rb_root *root)
+void rbInsert(struct FileInfo *node, struct rb_root *root)
 {
     struct rb_node **new, *parent = NULL;
     new = rbFind(node, parent, root);
