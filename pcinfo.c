@@ -61,7 +61,7 @@ struct Base
 };
 
 /** RB operations */
-static void rbInsert(struct FileInfo *node, struct rb_root *root)
+static struct rb_node** rbFind(const struct FileInfo *node, struct rb_root *root)
 {
     struct rb_node **new = &root->rb_node, *parent = NULL;
 
@@ -73,6 +73,13 @@ static void rbInsert(struct FileInfo *node, struct rb_root *root)
             new = &parent->rb_right;
         }
     }
+
+    return new;
+}
+static void rbInsert(struct FileInfo *node, struct rb_root *root)
+{
+    struct rb_node **new, *parent = NULL;
+    new = rbFind(node, root);
 
     rb_link_node(&node->node, parent, new);
     rb_insert_color(&node->node, root);
@@ -137,8 +144,9 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
 
         for (; page != end; ++page) {
             struct address_space *mapping = page->mapping;
-            /** XXX: slab */
+            /** XXX: slab or even avoid this */
             struct FileInfo *info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
+            struct rb_node **existed;
             BUG_ON(!info);
 
             if (!mapping || !mapping->host) {
@@ -147,7 +155,16 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
 
             info->host = mapping->host;
             info->size += mapping->nrpages * PAGE_SIZE;
-            rbInsert(info, &base.rbRoot);
+            existed = rbFind(info, &base.rbRoot);
+            /** XXX: augment */
+            if (*existed) {
+                struct FileInfo *eInfo = rb_entry(*existed, struct FileInfo, node);
+                eInfo->size += info->size;
+
+                kfree(info);
+            } else {
+                rbInsert(info, &base.rbRoot);
+            }
         }
     }
 
