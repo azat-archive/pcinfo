@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/mmzone.h>
+#include <linux/mm.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
@@ -93,19 +94,26 @@ static int pcInfoShow(struct seq_file *m, void *v)
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
 
+    size_t mappings = 0;
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
         struct page *end = pgdat_page_nr(pgd, node_spanned_pages(pgd->node_id));
 
-        for (; page != end; ++page) {
+        for (; page <= end; ++page) {
             struct address_space *mapping = page->mapping;
             /** XXX: slab or even avoid this */
             struct FileInfo *info;
             struct rb_node *existed;
 
-            if (!mapping || !mapping->host) {
+            if (PageAnon(page) || !PagePrivate(page) ||
+                !mapping || !mapping->host) {
                 continue;
             }
+            if (++mappings > 5) {
+                break;
+            }
+
+            printk(KERN_ALERT "[%lu] %zu\n", mapping->host->i_ino, mapping->nrpages);
 
             info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
             BUG_ON(!info);
@@ -124,10 +132,11 @@ static int pcInfoShow(struct seq_file *m, void *v)
     }
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
+        printk(KERN_ALERT "u[%lu] %zu\n", eInfo->ino, eInfo->size);
         seq_printf(m, "[%lu] %zu\n",
                    eInfo->ino, eInfo->size);
 
-        rb_erase(&eInfo->node, &base.rbRoot);
+        kfree(eInfo);
     }
 
     return 0;
