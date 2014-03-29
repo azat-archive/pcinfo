@@ -33,7 +33,7 @@ struct FileInfo
 {
     struct rb_node node;
 
-    struct inode *host;
+    size_t ino;
     size_t size;
 };
 struct Base
@@ -53,7 +53,7 @@ struct rb_node** rbFind(const struct FileInfo *node,
 
     while (*new) {
         parent = *new;
-        if (node->host < rb_entry(parent, struct FileInfo, node)->host) {
+        if (node->ino < rb_entry(parent, struct FileInfo, node)->ino) {
             new = &parent->rb_left;
         } else {
             new = &parent->rb_right;
@@ -114,7 +114,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
             info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
             BUG_ON(!info);
 
-            info->host = mapping->host;
+            info->ino = mapping->host->i_ino;
             info->size = mapping->nrpages * PAGE_SIZE;
 
             /** XXX: optimize */
@@ -132,8 +132,8 @@ static int pcInfoShow(struct seq_file *m, void *v)
     }
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
-        seq_printf(m, "[%lu] %p: %zu\n",
-                   eInfo->host->i_ino, eInfo->host, eInfo->size);
+        seq_printf(m, "[%lu] %zu\n",
+                   eInfo->ino, eInfo->size);
 
         rb_erase(&eInfo->node, &base.rbRoot);
     }
