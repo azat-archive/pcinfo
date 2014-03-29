@@ -45,9 +45,11 @@ static struct Base base;
 
 
 /** RB operations */
-static struct rb_node** rbFind(const struct FileInfo *node, struct rb_root *root)
+static struct rb_node** rbFind(const struct FileInfo *node,
+                               struct rb_node *parent,
+                               struct rb_root *root)
 {
-    struct rb_node **new = &root->rb_node, *parent = NULL;
+    struct rb_node **new = &root->rb_node;
 
     while (*new) {
         parent = *new;
@@ -63,7 +65,7 @@ static struct rb_node** rbFind(const struct FileInfo *node, struct rb_root *root
 static void rbInsert(struct FileInfo *node, struct rb_root *root)
 {
     struct rb_node **new, *parent = NULL;
-    new = rbFind(node, root);
+    new = rbFind(node, parent, root);
 
     rb_link_node(&node->node, parent, new);
     rb_insert_color(&node->node, root);
@@ -93,6 +95,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
 {
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
+    struct rb_node *parent;
 
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
@@ -114,7 +117,8 @@ static int pcInfoShow(struct seq_file *m, void *v)
             info->host = mapping->host;
             info->size = mapping->nrpages * PAGE_SIZE;
 
-            existed = rbFind(info, &base.rbRoot);
+            /** XXX: optimize */
+            existed = rbFind(info, parent, &base.rbRoot);
             /** XXX: augment */
             if (*existed) {
                 eInfo = rb_entry(*existed, struct FileInfo, node);
