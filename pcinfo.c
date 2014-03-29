@@ -15,6 +15,7 @@
 #include <linux/fs.h>
 #include <linux/mmzone.h>
 #include <asm/pgtable.h>
+#include "compat.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Azat Khuzhin <a3at.mail@gmail.com>");
