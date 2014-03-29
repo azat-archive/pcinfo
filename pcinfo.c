@@ -102,7 +102,7 @@ static int __init pcInfoInit(void)
         return majorNumber;
     }
 
-    printk(KERN_INFO "pcInfo: loaded (major number: %d)", majorNumber);
+    printk(KERN_INFO "pcInfo: loaded (major number: %d)\n", majorNumber);
     return SUCCESS;
 }
 
