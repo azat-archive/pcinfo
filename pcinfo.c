@@ -101,16 +101,19 @@ static int pcInfoShow(struct seq_file *m, void *v)
         for (; page != end; ++page) {
             struct address_space *mapping = page->mapping;
             /** XXX: slab or even avoid this */
-            struct FileInfo *info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
+            struct FileInfo *info;
             struct rb_node **existed;
-            BUG_ON(!info);
 
             if (!mapping || !mapping->host) {
                 continue;
             }
 
+            info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
+            BUG_ON(!info);
+
             info->host = mapping->host;
             info->size += mapping->nrpages * PAGE_SIZE;
+
             existed = rbFind(info, &base.rbRoot);
             /** XXX: augment */
             if (*existed) {
