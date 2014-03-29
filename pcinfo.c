@@ -137,6 +137,7 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
                           size_t length, loff_t *offset)
 {
     pg_data_t *pgd;
+    struct FileInfo *eInfo, *tmp;
 
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
@@ -158,7 +159,7 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
             existed = rbFind(info, &base.rbRoot);
             /** XXX: augment */
             if (*existed) {
-                struct FileInfo *eInfo = rb_entry(*existed, struct FileInfo, node);
+                eInfo = rb_entry(*existed, struct FileInfo, node);
                 eInfo->size += info->size;
 
                 kfree(info);
@@ -166,6 +167,13 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
                 rbInsert(info, &base.rbRoot);
             }
         }
+    }
+
+    rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
+        printk(KERN_INFO "[%lu] %p: %zu\n",
+                         eInfo->host->i_ino, eInfo->host, eInfo->size);
+
+        rb_erase(&eInfo->node, &base.rbRoot);
     }
 
     return -EINVAL;
