@@ -2,8 +2,6 @@
 /**
  * pcinfo - pagecache info
  *
- * XXX: use /proc or debufs?
- *
  * Tested on 3.14
  */
 
@@ -16,36 +14,21 @@
 #include <linux/mmzone.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <asm/pgtable.h>
 #include "compat.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Azat Khuzhin <a3at.mail@gmail.com>");
 
-// Move to header
 static int pcInfoInit(void) __init;
 static void pcInfoExit(void) __exit;
-static int deviceOpen(struct inode *inode, struct file *file);
-static int deviceRelease(struct inode *inode, struct file *file);
-static ssize_t deviceRead(struct file *filePtr, char *buffer,
-                          size_t length, loff_t *offset);
-static ssize_t deviceWrite(struct file *filePtr, const char *buffer,
-                           size_t length, loff_t *offset);
-
-static struct file_operations deviceOperations = {
-    .read = deviceRead,
-    .write = deviceWrite,
-    .open = deviceOpen,
-    .release = deviceRelease
-};
+static int pcInfoOpen(struct inode *inode, struct file *file);
 
 module_init(pcInfoInit);
 module_exit(pcInfoExit);
 
-#define SUCCESS 0
-#define DEVICE_NAME "pcinfo"
-
-static int majorNumber;
 struct FileInfo
 {
     struct rb_node node;
@@ -55,10 +38,11 @@ struct FileInfo
 };
 struct Base
 {
-    int deviceOpened; /* prevent multiple access to device */
-
     struct rb_root rbRoot;
 };
+/** XXX: attach it to inode */
+static struct Base base;
+
 
 /** RB operations */
 static struct rb_node** rbFind(const struct FileInfo *node, struct rb_root *root)
@@ -86,55 +70,26 @@ static void rbInsert(struct FileInfo *node, struct rb_root *root)
 }
 /** \ RB operations */
 
-/** XXX: attach it to inode */
-static struct Base base;
 
+/** proc driver */
+static struct file_operations operations = {
+    .open = pcInfoOpen,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
 
-/**
- * Add MKDEV()
- */
 static int __init pcInfoInit(void)
 {
-    majorNumber = register_chrdev(0, DEVICE_NAME, &deviceOperations);
-
-    if (majorNumber < 0) {
-        printk(KERN_ALERT "Registering char device failed with %d\n", majorNumber);
-        return majorNumber;
-    }
-
-    printk(KERN_INFO "pcInfo: loaded (major number: %d)\n", majorNumber);
-    return SUCCESS;
+    proc_create("pagecache_info", 0, NULL, &operations);
+    return 0;
 }
-
 static void __exit pcInfoExit(void)
 {
-    printk(KERN_INFO "pcInfo: exit\n");
+    remove_proc_entry("pagecache_info", NULL);
 }
 
-static int deviceOpen(struct inode *inode, struct file *file)
-{
-    if (base.deviceOpened) {
-        return -EBUSY;
-    }
-
-    base.deviceOpened++;
-    try_module_get(THIS_MODULE);
-
-    printk(KERN_INFO "pcInfo: device is opened\n");
-    return SUCCESS;
-}
-
-static int deviceRelease(struct inode *inode, struct file *file)
-{
-    base.deviceOpened--;
-    module_put(THIS_MODULE);
-
-    printk(KERN_INFO "pcInfo: device is released\n");
-    return SUCCESS;
-}
-
-static ssize_t deviceRead(struct file *filePtr, char *buffer,
-                          size_t length, loff_t *offset)
+static int pcInfoShow(struct seq_file *m, void *v)
 {
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
@@ -170,18 +125,17 @@ static ssize_t deviceRead(struct file *filePtr, char *buffer,
     }
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
-        printk(KERN_INFO "[%lu] %p: %zu\n",
-                         eInfo->host->i_ino, eInfo->host, eInfo->size);
+        seq_printf(m, "[%lu] %p: %zu\n",
+                   eInfo->host->i_ino, eInfo->host, eInfo->size);
 
         rb_erase(&eInfo->node, &base.rbRoot);
     }
 
-    return -EINVAL;
+    return 0;
 }
 
-static ssize_t deviceWrite(struct file *filePtr, const char *buffer,
-                           size_t length, loff_t *offset)
+static int pcInfoOpen(struct inode *inode, struct file *file)
 {
-    printk(KERN_ALERT "Sorry, this operation isn't supported.\n");
-    return -EINVAL;
+    return single_open(file, pcInfoShow, NULL);
 }
+/** \proc driver */
