@@ -2,6 +2,8 @@
 /**
  * pcinfo - pagecache info
  *
+ * XXX: use /proc or debufs?
+ *
  * Tested on 3.14
  */
 
@@ -11,6 +13,8 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/fs.h>
+#include <linux/mmzone.h>
+#include <asm/pgtable.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Azat Khuzhin <a3at.mail@gmail.com>");
@@ -93,7 +97,30 @@ static int deviceRelease(struct inode *inode, struct file *file)
 static ssize_t deviceRead(struct file *filePtr, char *buffer,
                           size_t length, loff_t *offset)
 {
-    printk(KERN_ALERT "Sorry, this operation isn't supported.\n");
+    pg_data_t *pgd;
+
+    unsigned long mappings = 0;
+    unsigned long pagesCached = 0;
+
+    for_each_online_pgdat(pgd) {
+        struct page *page = pgdat_page_nr(pgd, 0);
+        struct page *end = pgdat_page_nr(pgd, node_spanned_pages(pgd->node_id));
+
+        for (; page != end; ++page) {
+            struct address_space *mapping = page->mapping;
+            if (!mapping) {
+                continue;
+            }
+            if (!mapping->host) {
+                continue;
+            }
+
+            ++mappings;
+        }
+    }
+
+    printk(KERN_INFO "pcInfo: Mappings: %lu\n", mappings);
+
     return -EINVAL;
 }
 
