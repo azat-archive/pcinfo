@@ -111,8 +111,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
                 continue;
             }
 
-            printk(KERN_ALERT "[%lu] %zu\n", mapping->host->i_ino, mapping->nrpages);
-
             info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
             BUG_ON(!info);
 
@@ -130,7 +128,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
     }
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
-        printk(KERN_ALERT "u[%lu] %zu\n", eInfo->ino, eInfo->size);
         seq_printf(m, "[%lu] %zu\n",
                    eInfo->ino, eInfo->size);
 
