@@ -46,7 +46,7 @@ static struct Base base;
 
 
 /** RB operations */
-int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node *e)
+int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node **e)
 {
     size_t ino;
     struct rb_node **new = &root->rb_node, *parent = NULL;
@@ -59,7 +59,7 @@ int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node *e)
         } else if (node->ino > ino) {
             new = &parent->rb_right;
         } else {
-            e = parent;
+            *e = parent;
             return -EEXIST;
         }
     }
@@ -95,6 +95,8 @@ static int pcInfoShow(struct seq_file *m, void *v)
     struct FileInfo *eInfo, *tmp;
 
     size_t mappings = 0;
+    base.rbRoot.rb_node = NULL;
+
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
         struct page *end = pgdat_page_nr(pgd, node_spanned_pages(pgd->node_id));
@@ -122,7 +124,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
             info->size = mapping->nrpages * PAGE_SIZE;
 
             /** XXX: augment */
-            if (rbInsert(info, &base.rbRoot, existed) == -EEXIST) {
+            if (rbInsert(info, &base.rbRoot, &existed) == -EEXIST) {
                 eInfo = rb_entry(existed, struct FileInfo, node);
                 eInfo->size += info->size;
 
