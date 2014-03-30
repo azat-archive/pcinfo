@@ -72,6 +72,28 @@ int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node **e)
 /** \ RB operations */
 
 
+/** helpers */
+static inline u64 div(u64 num, int factor)
+{
+    if (!factor) {
+        return num;
+    }
+
+    do_div(num, factor);
+    return num;
+}
+
+static int printInodeCached(struct seq_file *m, struct dentry *dentry,
+                            struct inode *inode, size_t cached)
+{
+    return seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
+                      dentry, inode->i_ino,
+                      div(cached, inode->i_size) * 100,
+                      div(cached, 1024), div(inode->i_size, 1024));
+}
+/** \ helpers */
+
+
 /**
  * pagecache info driver
  */
@@ -123,15 +145,6 @@ static void __exit pcInfoExit(void)
     kmem_cache_destroy(pcBase.cachep);
 }
 
-static inline u64 div(u64 num, int factor)
-{
-    if (!factor) {
-        return num;
-    }
-
-    do_div(num, factor);
-    return num;
-}
 static int pcInfoShow(struct seq_file *m, void *v)
 {
     pg_data_t *pgd;
@@ -171,13 +184,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &pcBase.rbRoot, node) {
         struct dentry *dentry = d_find_alias(eInfo->host);
-        size_t inodeSize = eInfo->host->i_size;
-
-        seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
-                   dentry, eInfo->host->i_ino,
-                   div(eInfo->size, inodeSize) * 100,
-                   div(eInfo->size, 1024), div(inodeSize, 1024));
-
+        printInodeCached(m, dentry, eInfo->host, eInfo->size);
         kmem_cache_free(pcBase.cachep, eInfo);
     }
 
@@ -196,13 +203,10 @@ static const char *supportedFs[] = { "ext4" };
 static enum lru_status pcLruWalk(struct list_head *item, spinlock_t *lock, void *m)
 {
    struct inode *inode = container_of(item, struct inode, i_lru);
+   size_t cached = inode->i_mapping ? inode->i_mapping->nrpages * PAGE_SIZE : 0;
    struct dentry *dentry = d_find_alias(inode);
 
-   size_t cached = inode->i_mapping ? inode->i_mapping->nrpages * PAGE_SIZE : 0;
-   seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
-              dentry, inode->i_ino,
-              div(cached, inode->i_size) * 100,
-              div(cached, 1024), div(inode->i_size, 1024));
+   printInodeCached(m, dentry, inode, cached);
 
    return LRU_SKIP;
 }
@@ -258,14 +262,10 @@ static int pcInfoAllShow(struct seq_file *m, void *v)
             seq_printf(m, "Device: %s\n", sb->s_id);
 
             list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-                /** XXX: avoid code duplication */
                 size_t cached = inode->i_mapping ? inode->i_mapping->nrpages * PAGE_SIZE : 0;
                 struct dentry *dentry = d_find_alias(inode);
 
-                seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
-                           dentry, inode->i_ino,
-                           div(cached, inode->i_size) * 100,
-                           div(cached, 1024), div(inode->i_size, 1024));
+                printInodeCached(m, dentry, inode, cached);
             }
         }
     }
