@@ -144,7 +144,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
         struct dentry *dentry = d_find_alias(eInfo->host);
 
-        seq_printf(m, "%pd (%lu): %zu\n",
+        seq_printf(m, "%pd4 (%lu): %zu\n",
                    dentry, eInfo->host->i_ino, eInfo->size);
 
         kmem_cache_free(base.cachep, eInfo);
