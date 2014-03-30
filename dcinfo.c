@@ -40,6 +40,13 @@ static void __exit dcInfoExit(void)
     remove_proc_entry("dentrycache_info", NULL);
 }
 
+static enum lru_status dcWalk(struct list_head *item, spinlock_t *lock, void *m)
+{
+   struct dentry *dentry = container_of(item, struct dentry, d_lru);
+   seq_printf(m, "%pd4\n", dentry);
+
+   return LRU_SKIP;
+}
 static int dcInfoShow(struct seq_file *m, void *v)
 {
     char buf[PAGE_SIZE]; /** XXX dynamically */
@@ -51,23 +58,21 @@ static int dcInfoShow(struct seq_file *m, void *v)
 
     while (len > 0) {
         char dev[PATH_MAX], name[PATH_MAX]; /** XXX dynamically */
-        struct file_system_type **p, *fs;
-        struct dentry *dentry;
+        struct file_system_type *fs;
+        struct super_block *sb;
 
         len -= sscanf(buf, "%s %s\n", dev, name);
         seq_printf(m, "Filesystem: %s\n", name);
-        p = find_filesystem(name, strlen(name));
-        fs = *p;
-        if (fs) {
+        fs = get_fs_type(name);
+        if (!fs) {
             continue;
         }
 
-        rcu_read_lock();
-        list_for_each_entry_rcu(dentry, &fs->s_dentry_lru, d_lru) {
-            seq_printf(m, "%pd4\n", dentry);
+        hlist_for_each_entry(sb, &fs->fs_supers, s_instances) {
+            rcu_read_lock();
+            list_lru_walk(&sb->s_dentry_lru, dcWalk, m, UINT_MAX);
+            rcu_read_unlock();
         }
-        fs->s_dentry_lru;
-        rcu_read_unlock();
     }
 
     return 0;
