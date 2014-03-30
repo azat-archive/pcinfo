@@ -105,6 +105,11 @@ static void __exit pcInfoExit(void)
     kmem_cache_destroy(pcBase.cachep);
 }
 
+static inline u64 div(u64 num, int factor)
+{
+    do_div(num, factor);
+    return num;
+}
 static int pcInfoShow(struct seq_file *m, void *v)
 {
     pg_data_t *pgd;
@@ -144,9 +149,12 @@ static int pcInfoShow(struct seq_file *m, void *v)
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &pcBase.rbRoot, node) {
         struct dentry *dentry = d_find_alias(eInfo->host);
+        size_t inodeSize = eInfo->host->i_size;
 
-        seq_printf(m, "%pd4 (%lu): %zu\n",
-                   dentry, eInfo->host->i_ino, eInfo->size);
+        seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
+                   dentry, eInfo->host->i_ino,
+                   div(eInfo->size, inodeSize) * 100,
+                   div(eInfo->size, 1024), div(inodeSize, 1024));
 
         kmem_cache_free(pcBase.cachep, eInfo);
     }
