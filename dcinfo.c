@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
+#include <linux/slab.h>
 #include <linux/seq_file.h>
 
 MODULE_LICENSE("GPL");
@@ -52,19 +53,24 @@ static enum lru_status dcWalk(struct list_head *item, spinlock_t *lock, void *m)
 }
 static int dcInfoShow(struct seq_file *m, void *v)
 {
-    char buf[PAGE_SIZE]; /** XXX dynamically */
-    int len = get_filesystem_list(buf);
+    char *page = __getname();
+    char *dev = __getname(), *name = __getname();
+    int len;
 
+    if (!page || !dev || !name) {
+        return -ENOMEM;
+    }
+
+    len = get_filesystem_list(page);
     if (len <= 0) {
         return 0;
     }
 
     while (len > 0) {
-        char dev[PATH_MAX], name[PATH_MAX]; /** XXX dynamically */
         struct file_system_type *fs;
         struct super_block *sb;
 
-        len -= sscanf(buf, "%s %s\n", dev, name);
+        len -= sscanf(page, "%s %s\n", dev, name);
         seq_printf(m, "Filesystem: %s\n", name);
         fs = get_fs_type(name);
         if (!fs) {
@@ -77,6 +83,10 @@ static int dcInfoShow(struct seq_file *m, void *v)
             rcu_read_unlock();
         }
     }
+
+    __putname(page);
+    __putname(dev);
+    __putname(name);
 
     return 0;
 }
