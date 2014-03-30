@@ -137,9 +137,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
 
             /** XXX: augment */
             if (rbInsert(info, &pcBase.rbRoot, &existed) == -EEXIST) {
-                eInfo = rb_entry(existed, struct FileInfo, node);
-                eInfo->size += info->size;
-
                 kmem_cache_free(pcBase.cachep, info);
             }
         }
