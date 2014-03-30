@@ -42,8 +42,6 @@ struct Base
     struct rb_root rbRoot;
     struct kmem_cache *cachep;
 };
-/** XXX: attach it to inode */
-static struct Base base;
 
 
 /** RB operations */
@@ -72,8 +70,14 @@ int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node **e)
 /** \ RB operations */
 
 
-/** proc driver */
-static struct file_operations operations = {
+/**
+ * pagecache info driver
+ */
+
+/** XXX: attach it to inode */
+static struct Base pcBase;
+
+static struct file_operations pcInfoOperations = {
     .open = pcInfoOpen,
     .read = seq_read,
     .llseek = seq_lseek,
@@ -82,14 +86,14 @@ static struct file_operations operations = {
 
 static int __init pcInfoInit(void)
 {
-    proc_create("pagecache_info", 0, NULL, &operations);
+    proc_create("pagecache_info", 0, NULL, &pcInfoOperations);
 
-    base.cachep = kmem_cache_create("pagecache_info_rb_nodes",
+    pcBase.cachep = kmem_cache_create("pagecache_info_rb_nodes",
                                     sizeof(struct FileInfo),
                                     0,
                                     (SLAB_RECLAIM_ACCOUNT| SLAB_MEM_SPREAD),
                                     NULL);
-    if (!base.cachep) {
+    if (!pcBase.cachep) {
         return -ENOMEM;
     }
 
@@ -98,7 +102,7 @@ static int __init pcInfoInit(void)
 static void __exit pcInfoExit(void)
 {
     remove_proc_entry("pagecache_info", NULL);
-    kmem_cache_destroy(base.cachep);
+    kmem_cache_destroy(pcBase.cachep);
 }
 
 static int pcInfoShow(struct seq_file *m, void *v)
@@ -106,7 +110,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
 
-    base.rbRoot.rb_node = NULL;
+    pcBase.rbRoot.rb_node = NULL;
 
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
@@ -122,7 +126,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
                 continue;
             }
 
-            info = kmem_cache_alloc(base.cachep, GFP_KERNEL);
+            info = kmem_cache_alloc(pcBase.cachep, GFP_KERNEL);
             if (!info) {
                 return -ENOMEM;
             }
@@ -132,22 +136,22 @@ static int pcInfoShow(struct seq_file *m, void *v)
             info->size = mapping->nrpages * PAGE_SIZE;
 
             /** XXX: augment */
-            if (rbInsert(info, &base.rbRoot, &existed) == -EEXIST) {
+            if (rbInsert(info, &pcBase.rbRoot, &existed) == -EEXIST) {
                 eInfo = rb_entry(existed, struct FileInfo, node);
                 eInfo->size += info->size;
 
-                kmem_cache_free(base.cachep, info);
+                kmem_cache_free(pcBase.cachep, info);
             }
         }
     }
 
-    rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
+    rbtree_postorder_for_each_entry_safe(eInfo, tmp, &pcBase.rbRoot, node) {
         struct dentry *dentry = d_find_alias(eInfo->host);
 
         seq_printf(m, "%pd4 (%lu): %zu\n",
                    dentry, eInfo->host->i_ino, eInfo->size);
 
-        kmem_cache_free(base.cachep, eInfo);
+        kmem_cache_free(pcBase.cachep, eInfo);
     }
 
     return 0;
@@ -157,4 +161,6 @@ static int pcInfoOpen(struct inode *inode, struct file *file)
 {
     return single_open(file, pcInfoShow, NULL);
 }
-/** \proc driver */
+/**
+ * \ pagecache info driver
+ */
