@@ -94,7 +94,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
 
-    size_t mappings = 0;
     base.rbRoot.rb_node = NULL;
 
     for_each_online_pgdat(pgd) {
@@ -110,9 +109,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
             if (PageAnon(page) || !PagePrivate(page) ||
                 !mapping || !mapping->host) {
                 continue;
-            }
-            if (++mappings > 5) {
-                break;
             }
 
             printk(KERN_ALERT "[%lu] %zu\n", mapping->host->i_ino, mapping->nrpages);
