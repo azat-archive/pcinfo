@@ -34,6 +34,8 @@ static struct file_operations dcInfoOperations = {
     .release = single_release,
 };
 
+static const char *supportedFs[] = { "ext4" };
+
 static int __init dcInfoInit(void)
 {
     proc_create("dentrycache_info", 0, NULL, &dcInfoOperations);
@@ -53,24 +55,12 @@ static enum lru_status dcWalk(struct list_head *item, spinlock_t *lock, void *m)
 }
 static int dcInfoShow(struct seq_file *m, void *v)
 {
-    char *page = __getname();
-    char *dev = __getname(), *name = __getname();
-    int len;
-
-    if (!page || !dev || !name) {
-        return -ENOMEM;
-    }
-
-    len = get_filesystem_list(page);
-    if (len <= 0) {
-        return 0;
-    }
-
-    while (len > 0) {
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(supportedFs); ++i) {
         struct file_system_type *fs;
         struct super_block *sb;
+        const char *name = supportedFs[i];
 
-        len -= sscanf(page, "%s %s\n", dev, name);
         seq_printf(m, "Filesystem: %s\n", name);
         fs = get_fs_type(name);
         if (!fs) {
@@ -78,15 +68,13 @@ static int dcInfoShow(struct seq_file *m, void *v)
         }
 
         hlist_for_each_entry(sb, &fs->fs_supers, s_instances) {
+            seq_printf(m, "Device: %s\n", sb->s_id);
+
             rcu_read_lock();
             list_lru_walk(&sb->s_dentry_lru, dcWalk, m, UINT_MAX);
             rcu_read_unlock();
         }
     }
-
-    __putname(page);
-    __putname(dev);
-    __putname(name);
 
     return 0;
 }
