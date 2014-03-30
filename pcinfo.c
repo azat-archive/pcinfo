@@ -45,30 +45,27 @@ static struct Base base;
 
 
 /** RB operations */
-struct rb_node** rbFind(const struct FileInfo *node,
-                               struct rb_node *parent,
-                               struct rb_root *root)
+int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node *e)
 {
-    struct rb_node **new = &root->rb_node;
+    size_t ino;
+    struct rb_node **new = &root->rb_node, *parent = NULL;
 
     while (*new) {
         parent = *new;
-        if (node->ino < rb_entry(parent, struct FileInfo, node)->ino) {
+        ino = rb_entry(parent, struct FileInfo, node)->ino;
+        if (node->ino < ino) {
             new = &parent->rb_left;
-        } else {
+        } else if (node->ino > ino) {
             new = &parent->rb_right;
+        } else {
+            e = parent;
+            return -EEXIST;
         }
     }
 
-    return new;
-}
-void rbInsert(struct FileInfo *node, struct rb_root *root)
-{
-    struct rb_node **new, *parent = NULL;
-    new = rbFind(node, parent, root);
-
     rb_link_node(&node->node, parent, new);
     rb_insert_color(&node->node, root);
+    return 0;
 }
 /** \ RB operations */
 
@@ -95,7 +92,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
 {
     pg_data_t *pgd;
     struct FileInfo *eInfo, *tmp;
-    struct rb_node *parent;
 
     for_each_online_pgdat(pgd) {
         struct page *page = pgdat_page_nr(pgd, 0);
@@ -105,7 +101,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
             struct address_space *mapping = page->mapping;
             /** XXX: slab or even avoid this */
             struct FileInfo *info;
-            struct rb_node **existed;
+            struct rb_node *existed;
 
             if (!mapping || !mapping->host) {
                 continue;
@@ -117,16 +113,12 @@ static int pcInfoShow(struct seq_file *m, void *v)
             info->ino = mapping->host->i_ino;
             info->size = mapping->nrpages * PAGE_SIZE;
 
-            /** XXX: optimize */
-            existed = rbFind(info, parent, &base.rbRoot);
             /** XXX: augment */
-            if (*existed) {
-                eInfo = rb_entry(*existed, struct FileInfo, node);
+            if (rbInsert(info, &base.rbRoot, existed) == -EEXIST) {
+                eInfo = rb_entry(existed, struct FileInfo, node);
                 eInfo->size += info->size;
 
                 kfree(info);
-            } else {
-                rbInsert(info, &base.rbRoot);
             }
         }
     }
