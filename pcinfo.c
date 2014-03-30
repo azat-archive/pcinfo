@@ -34,7 +34,7 @@ struct FileInfo
 {
     struct rb_node node;
 
-    size_t ino;
+    struct inode *host;
     size_t size;
 };
 struct Base
@@ -54,10 +54,10 @@ int rbInsert(struct FileInfo *node, struct rb_root *root, struct rb_node **e)
 
     while (*new) {
         parent = *new;
-        ino = rb_entry(parent, struct FileInfo, node)->ino;
-        if (node->ino < ino) {
+        ino = rb_entry(parent, struct FileInfo, node)->host->i_ino;
+        if (node->host->i_ino < ino) {
             new = &parent->rb_left;
-        } else if (node->ino > ino) {
+        } else if (node->host->i_ino > ino) {
             new = &parent->rb_right;
         } else {
             *e = parent;
@@ -127,7 +127,8 @@ static int pcInfoShow(struct seq_file *m, void *v)
                 return -ENOMEM;
             }
 
-            info->ino = mapping->host->i_ino;
+            /** XXX: we can lost it */
+            info->host = mapping->host;
             info->size = mapping->nrpages * PAGE_SIZE;
 
             /** XXX: augment */
@@ -141,8 +142,10 @@ static int pcInfoShow(struct seq_file *m, void *v)
     }
 
     rbtree_postorder_for_each_entry_safe(eInfo, tmp, &base.rbRoot, node) {
-        seq_printf(m, "[%lu] %zu\n",
-                   eInfo->ino, eInfo->size);
+        struct dentry *dentry = d_find_alias(eInfo->host);
+
+        seq_printf(m, "%pd (%lu): %zu\n",
+                   dentry, eInfo->host->i_ino, eInfo->size);
 
         kmem_cache_free(base.cachep, eInfo);
     }
