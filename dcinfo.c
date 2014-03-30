@@ -12,6 +12,9 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Azat Khuzhin <a3at.mail@gmail.com>");
+
 /**
  * dentry cache info driver
  */
