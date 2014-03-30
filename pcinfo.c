@@ -40,6 +40,7 @@ struct FileInfo
 struct Base
 {
     struct rb_root rbRoot;
+    struct kmem_cache *cachep;
 };
 /** XXX: attach it to inode */
 static struct Base base;
@@ -82,11 +83,22 @@ static struct file_operations operations = {
 static int __init pcInfoInit(void)
 {
     proc_create("pagecache_info", 0, NULL, &operations);
+
+    base.cachep = kmem_cache_create("pagecache_info_rb_nodes",
+                                    sizeof(struct FileInfo),
+                                    0,
+                                    (SLAB_RECLAIM_ACCOUNT| SLAB_MEM_SPREAD),
+                                    NULL);
+    if (!base.cachep) {
+        return -ENOMEM;
+    }
+
     return 0;
 }
 static void __exit pcInfoExit(void)
 {
     remove_proc_entry("pagecache_info", NULL);
+    kmem_cache_destroy(base.cachep);
 }
 
 static int pcInfoShow(struct seq_file *m, void *v)
@@ -102,7 +114,6 @@ static int pcInfoShow(struct seq_file *m, void *v)
 
         for (; page <= end; ++page) {
             struct address_space *mapping = page->mapping;
-            /** XXX: slab or even avoid this */
             struct FileInfo *info;
             struct rb_node *existed;
 
@@ -111,8 +122,10 @@ static int pcInfoShow(struct seq_file *m, void *v)
                 continue;
             }
 
-            info = kmalloc(sizeof(struct FileInfo), GFP_KERNEL);
-            BUG_ON(!info);
+            info = kmem_cache_alloc(base.cachep, GFP_KERNEL);
+            if (!info) {
+                return -ENOMEM;
+            }
 
             info->ino = mapping->host->i_ino;
             info->size = mapping->nrpages * PAGE_SIZE;
@@ -122,7 +135,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
                 eInfo = rb_entry(existed, struct FileInfo, node);
                 eInfo->size += info->size;
 
-                kfree(info);
+                kmem_cache_free(base.cachep, info);
             }
         }
     }
@@ -131,7 +144,7 @@ static int pcInfoShow(struct seq_file *m, void *v)
         seq_printf(m, "[%lu] %zu\n",
                    eInfo->ino, eInfo->size);
 
-        kfree(eInfo);
+        kmem_cache_free(base.cachep, eInfo);
     }
 
     return 0;
