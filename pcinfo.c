@@ -27,6 +27,7 @@ static int pcInfoInit(void) __init;
 static void pcInfoExit(void) __exit;
 static int pcInfoOpen(struct inode *inode, struct file *file);
 static int pcInfoLruOpen(struct inode *inode, struct file *file);
+static int pcInfoAllOpen(struct inode *inode, struct file *file);
 
 module_init(pcInfoInit);
 module_exit(pcInfoExit);
@@ -90,11 +91,18 @@ static struct file_operations pcInfoLruOperations = {
     .llseek = seq_lseek,
     .release = single_release,
 };
+static struct file_operations pcInfoAllOperations = {
+    .open = pcInfoAllOpen,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
 
 static int __init pcInfoInit(void)
 {
     proc_create("pagecache_info", 0, NULL, &pcInfoOperations);
     proc_create("pagecache_info_lru", 0, NULL, &pcInfoLruOperations);
+    proc_create("pagecache_info_all", 0, NULL, &pcInfoAllOperations);
 
     pcBase.cachep = kmem_cache_create("pagecache_info_rb_nodes",
                                     sizeof(struct FileInfo),
@@ -111,6 +119,7 @@ static void __exit pcInfoExit(void)
 {
     remove_proc_entry("pagecache_info", NULL);
     remove_proc_entry("pagecache_info_lru", NULL);
+    remove_proc_entry("pagecache_info_all", NULL);
     kmem_cache_destroy(pcBase.cachep);
 }
 
@@ -223,6 +232,48 @@ static int pcInfoLruOpen(struct inode *inode, struct file *file)
 {
     return single_open(file, pcInfoLruShow, NULL);
 }
+/** \ LRU version */
+
+/** s_inodes version */
+static int pcInfoAllShow(struct seq_file *m, void *v)
+{
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(supportedFs); ++i) {
+        struct file_system_type *fs;
+        struct super_block *sb;
+        const char *name = supportedFs[i];
+
+        seq_printf(m, "Filesystem: %s\n", name);
+        fs = get_fs_type(name);
+        if (!fs) {
+            continue;
+        }
+
+        hlist_for_each_entry(sb, &fs->fs_supers, s_instances) {
+            struct inode *inode;
+            seq_printf(m, "Device: %s\n", sb->s_id);
+
+            list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+                /** XXX: avoid code duplication */
+                size_t cached = inode->i_mapping ? inode->i_mapping->nrpages * PAGE_SIZE : 0;
+                struct dentry *dentry = d_find_alias(inode);
+
+                seq_printf(m, "%pd4 (%lu): %llu %% (%lluK from %lluK)\n",
+                           dentry, inode->i_ino,
+                           div(cached, inode->i_size) * 100,
+                           div(cached, 1024), div(inode->i_size, 1024));
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int pcInfoAllOpen(struct inode *inode, struct file *file)
+{
+    return single_open(file, pcInfoAllShow, NULL);
+}
+/** \ s_inodes version */
 
 /**
  * \ pagecache info driver
