@@ -125,6 +125,10 @@ static void __exit pcInfoExit(void)
 
 static inline u64 div(u64 num, int factor)
 {
+    if (!factor) {
+        return num;
+    }
+
     do_div(num, factor);
     return num;
 }
